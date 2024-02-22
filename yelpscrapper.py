@@ -56,7 +56,7 @@ BUSINESS_PATH = '/businesses/'  # Business ID will come after slash.
 
 # Defaults for our simple example.
 DEFAULT_TERM = 'chinese'
-DEFAULT_LOCATION = 'New York City, NY'
+DEFAULT_LOCATION = 'Manhattan, NY'
 SEARCH_LIMIT = 50
 
 
@@ -118,7 +118,7 @@ def query_api(term, location):
 
     business_list = []
 
-    for offset in range(0, 1000, 50):
+    for offset in range(0, 50, 50):
         response = search(API_KEY, term, location, offset)
         businesses = response.get('businesses')
         if not businesses:
