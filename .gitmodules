@@ -1,6 +1,3 @@
 [submodule "cloud-hw1-starter"]
 	path = cloud-hw1-starter
 	url = https://github.com/yashaswi2000/cloud-hw1-starter.git
-[submodule "assignment-1-cdk"]
-	path = assignment-1-cdk
-	url = https://github.com/yashaswi2000/assignment-1-cdk.git

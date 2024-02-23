@@ -24,18 +24,18 @@ print(es.info())
 
 
 
-# response = es.indices.create(index='restaurants',
-#                              body={
-#                                  'mappings': {
-#                                      'properties': {
-#                                      'Restaurant': {
-#                                         'properties': {
-#                                             'RestaurantID': {'type': 'text'},
-#                                             'Cuisine': {'type': 'text'},
-#                                         }
-#                                     }
-#                                  }
-#                              }})
+response = es.indices.create(index='restaurants',
+                             body={
+                                 'mappings': {
+                                     'properties': {
+                                     'Restaurant': {
+                                        'properties': {
+                                            'RestaurantID': {'type': 'text'},
+                                            'Cuisine': {'type': 'text'},
+                                        }
+                                    }
+                                 }
+                             }})
 
 for cusine in ['Indian', 'Chinese', 'Mexican']:
     file = open(cusine+'.json', 'r')

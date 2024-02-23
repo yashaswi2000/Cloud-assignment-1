@@ -28,22 +28,13 @@ const welcome_formatter = async (content) => {
 const client = new Client({
   ...AwsSigv4Signer({
     region: 'us-east-1',
-    service: 'es',  // 'aoss' for OpenSearch Serverless
-    // Must return a Promise that resolve to an AWS.Credentials object.
-    // This function is used to acquire the credentials when the client start and
-    // when the credentials are expired.
-    // The Client will refresh the Credentials only when they are expired.
-    // With AWS SDK V2, Credentials.refreshPromise is used when available to refresh the credentials.
-
-    // Example with AWS SDK V3:
+    service: 'es',  
     getCredentials: () => {
-      // Any other method to acquire a new Credentials object can be used.
       const credentialsProvider = defaultProvider();
       return credentialsProvider();
     },
   }),
-  node: 'https://search-elasticstarsearch-3lcridy75e33yvzpzhfh2r4n5i.us-east-1.es.amazonaws.com', // OpenSearch domain URL
-  // node: "https://xxx.region.aoss.amazonaws.com" for OpenSearch Serverless
+  node: 'https://search-elasticstarsearch-3lcridy75e33yvzpzhfh2r4n5i.us-east-1.es.amazonaws.com',
 });
 
 const get_messages = async () => {
@@ -120,7 +111,7 @@ const input = { // SendEmailRequest
   },
   Message: { // Message
     Subject: { // Content
-      Data: "Swarali presents these amazing restaurants for your good time with friends and family", // required
+      Data: "Your Handpicked Restaurants are ", // required
       Charset: "UTF-8",
     },
     Body: { // Body
