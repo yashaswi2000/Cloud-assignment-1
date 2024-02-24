@@ -104,16 +104,79 @@ def get_slot_value(slots, slot_name):
             return slot['value']['interpretedValue']
         return None
 
-def dining_suggestion_intent(event):
+def check_dynamo_db(email):
+   
+    dynamodb = boto3.resource('dynamodb')
+    table_name = 'user-preferences'
+    table = dynamodb.Table(table_name)
+    response = table.get_item(Key={'Email': email})
+    print(response)
+    return response.get('Item')
     
+def send_email_via_ses(email_data):
+    ses = boto3.client('ses', region_name='us-east-1')
+    
+    try:
+        response = ses.send_email(
+            Source=email_data['Source'],
+            Destination={
+                'ToAddresses': email_data['Destination']['ToAddresses'],
+            },
+            Message={
+                'Subject': {
+                    'Data': email_data['Message']['Subject']['Data'],
+                    'Charset': email_data['Message']['Subject']['Charset']
+                },
+                'Body': {
+                    'Text': {
+                        'Data': email_data['Message']['Body']['Text']['Data'],
+                        'Charset': email_data['Message']['Body']['Text']['Charset']
+                    },
+                }
+            }
+        )
+        print("Email sent! Message ID:", response['MessageId'])
+        return response
+    except Exception as e:
+        print("Error sending email", e)
+        return None
+
+def dining_suggestion_intent(event):
     slots = event['sessionState']['intent']['slots']
     
+    email_slot_value = get_slot_value(slots, 'Email')
+    
+    if not email_slot_value:
+        return elicit_slot(event, 'Email')
+        
+    user_record = check_dynamo_db(email_slot_value)
+    
+    samepref_slot_value = get_slot_value(slots, 'SamePreference')
+    
+    if not user_record:
+        samepref_slot_value = 'no'
+    
+    else:
+        print(samepref_slot_value)
+        if not samepref_slot_value:
+            print("inside same preferences\n")
+            rest = elicit_slot(event, 'SamePreference')
+            print(rest)
+            return rest
+            
+        if samepref_slot_value.lower() == 'yes':
+            # Send email
+            body = json.loads(user_record['Body'])
+            send_email_via_ses(body)
+            return close_intent_with_fulfillment(event)
+        
     slot_order = ['Location', 'Cuisine', 'NumOfPeople', 'DiningDate', 'DiningTime', 'Email']
-    
-    
+        
     for slot_name in slot_order:
+        # Get the value of the current slot
         slot_value = get_slot_value(slots, slot_name)
         
+        # If the slot is not filled, elicit this slot
         if not slot_value:
             return elicit_slot(event, slot_name)
         
@@ -148,6 +211,9 @@ def dining_suggestion_intent(event):
         'Email': get_slot_value(slots, 'Email')
     }
     
+    # Send data to SQS
     send_to_sqs(details)
+        
 
+    # If all slots are valid, proceed with fulfillment
     return close_intent_with_fulfillment(event)

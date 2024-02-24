@@ -1,6 +1,6 @@
 import {SQSClient, ReceiveMessageCommand, DeleteMessageCommand} from '@aws-sdk/client-sqs';
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
-import { DynamoDBDocumentClient, QueryCommand } from "@aws-sdk/lib-dynamodb";
+import { DynamoDBDocumentClient, QueryCommand, PutCommand } from "@aws-sdk/lib-dynamodb";
 import { SESClient, SendEmailCommand } from "@aws-sdk/client-ses"; 
 import { defaultProvider } from '@aws-sdk/credential-provider-node'; // V3 SDK.
 import { Client } from '@opensearch-project/opensearch';
@@ -28,13 +28,22 @@ const welcome_formatter = async (content) => {
 const client = new Client({
   ...AwsSigv4Signer({
     region: 'us-east-1',
-    service: 'es',  
+    service: 'es',  // 'aoss' for OpenSearch Serverless
+    // Must return a Promise that resolve to an AWS.Credentials object.
+    // This function is used to acquire the credentials when the client start and
+    // when the credentials are expired.
+    // The Client will refresh the Credentials only when they are expired.
+    // With AWS SDK V2, Credentials.refreshPromise is used when available to refresh the credentials.
+
+    // Example with AWS SDK V3:
     getCredentials: () => {
+      // Any other method to acquire a new Credentials object can be used.
       const credentialsProvider = defaultProvider();
       return credentialsProvider();
     },
   }),
-  node: 'https://search-elasticstarsearch-3lcridy75e33yvzpzhfh2r4n5i.us-east-1.es.amazonaws.com',
+  node: 'https://search-elasticstarsearch-3lcridy75e33yvzpzhfh2r4n5i.us-east-1.es.amazonaws.com', // OpenSearch domain URL
+  // node: "https://xxx.region.aoss.amazonaws.com" for OpenSearch Serverless
 });
 
 const get_messages = async () => {
@@ -100,6 +109,23 @@ const input = {
   //console.log(response);
 }
 
+const put_dynamo = async (email, content, diningDate) => {
+    const client = DynamoDBDocumentClient.from(new DynamoDBClient({'region': "us-east-1"}));
+    const input = {
+      "Item": {
+        "Email": email,
+        "Body": JSON.stringify(content),
+        "DiningDate": diningDate
+      },
+      "ReturnConsumedCapacity": "TOTAL",
+      "TableName": "user-preferences"
+    };
+  const command = new PutCommand(input);
+  const response = await client.send(command);
+  return response;
+}
+
+
 const send_email = async (content) => {
   const client = new SESClient({'region': 'us-east-1'});
 const input = { // SendEmailRequest
@@ -125,6 +151,7 @@ const input = { // SendEmailRequest
 const command = new SendEmailCommand(input);
 const response = await client.send(command);
 console.log(response);
+return input;
 }
 
 export const handler = async (event) => {
@@ -136,7 +163,8 @@ export const handler = async (event) => {
     const full_rest = await get_dynamo(rest._id);
     res.restaurants.push(full_rest)
   }
-  await send_email(res);
+  let content = await send_email(res);
+  await put_dynamo(res['Email'], content, res['DiningDate']);
   
   // TODO implement
   const response = {

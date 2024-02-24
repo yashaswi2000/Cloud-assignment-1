@@ -1,36 +1,175 @@
-import { LexRuntimeV2Client, RecognizeTextCommand } from "@aws-sdk/client-lex-runtime-v2"; // ES Modules import
-const client = new LexRuntimeV2Client({ region: "us-east-1" });
+import {SQSClient, ReceiveMessageCommand, DeleteMessageCommand} from '@aws-sdk/client-sqs';
+import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
+import { DynamoDBDocumentClient, QueryCommand, PutCommand } from "@aws-sdk/lib-dynamodb";
+import { SESClient, SendEmailCommand } from "@aws-sdk/client-ses"; 
+import { defaultProvider } from '@aws-sdk/credential-provider-node'; // V3 SDK.
+import { Client } from '@opensearch-project/opensearch';
+import { AwsSigv4Signer } from '@opensearch-project/opensearch/aws';
+
+
+const string_formatter = async (restaurants) => {
+  let index = 1;
+  let ans = ""
+  for(const rest of restaurants) {
+    ans = ans + index + ") " + "Restaurant Name: " + rest.Name + "\n" + "Address: " + rest.Address.display_address.join() + "\n" + "Rating: " + rest.Rating + "\n" + "Number of Reviews: " + rest["Number of Reviews"] + "\n\n";
+    index = index + 1;
+  }
+  return ans;
+}
+
+const welcome_formatter = async (content) => {
+  let restString = await string_formatter(content.restaurants);
+  let ans = "Hey there, hope you are having a great day, please find below my recommendations for " + content['Cuisine'] + " restaurants for " + content['NumOfPeople'] + " people dining on " + content['DiningDate'] + " at " + content['DiningTime'] + "\n";
+  ans = ans + "\n\n";
+  ans = ans + restString;
+  return ans;
+}
+
+const client = new Client({
+  ...AwsSigv4Signer({
+    region: 'us-east-1',
+    service: 'es',  // 'aoss' for OpenSearch Serverless
+    // Must return a Promise that resolve to an AWS.Credentials object.
+    // This function is used to acquire the credentials when the client start and
+    // when the credentials are expired.
+    // The Client will refresh the Credentials only when they are expired.
+    // With AWS SDK V2, Credentials.refreshPromise is used when available to refresh the credentials.
+
+    // Example with AWS SDK V3:
+    getCredentials: () => {
+      // Any other method to acquire a new Credentials object can be used.
+      const credentialsProvider = defaultProvider();
+      return credentialsProvider();
+    },
+  }),
+  node: 'https://search-elasticstarsearch-3lcridy75e33yvzpzhfh2r4n5i.us-east-1.es.amazonaws.com', // OpenSearch domain URL
+  // node: "https://xxx.region.aoss.amazonaws.com" for OpenSearch Serverless
+});
+
+const get_messages = async () => {
+  const client = new SQSClient({'region': "us-east-1"});
+  const input = { // ReceiveMessageRequest
+  QueueUrl: "https://sqs.us-east-1.amazonaws.com/471112677060/Q1", // required
+  //ReceiveRequestAttemptId: "STRING_VALUE",
+};
+  const command = new ReceiveMessageCommand(input);
+  const response = await client.send(command);
+  console.log(response);
+  
+  const input_del = { // DeleteMessageRequest
+  QueueUrl: "https://sqs.us-east-1.amazonaws.com/471112677060/Q1", // required
+  ReceiptHandle: response.Messages[0].ReceiptHandle, // required
+  };
+  const command_del = new DeleteMessageCommand(input_del);
+  const delresponse = await client.send(command_del);
+  
+  return JSON.parse(response.Messages[0].Body)
+}
+
+
+const get_openSearch = async (cuisine) => {
+  const  url = "https://search-elasticstarsearch-3lcridy75e33yvzpzhfh2r4n5i.us-east-1.es.amazonaws.com"+"/restaurants/"+"_search"
+  var query = {
+  "size": 5, 
+  "query": {
+    "function_score": {
+      "query": {
+        "multi_match": {
+          "query": cuisine,
+          "fields": ["Restaurant.Cuisine"]
+        }
+      },
+      "random_score": {}
+    }
+    }
+}
+ var response = await client.search({
+  index: "restaurants",
+  body: query,
+});
+
+//console.log(response.body.hits.hits);//._source.Restaurant);
+return response.body.hits.hits;
+
+}
+
+const get_dynamo = async (id) => {
+  const client = DynamoDBDocumentClient.from(new DynamoDBClient({'region': "us-east-1"}));
+const input = {
+  TableName: "yelp-restaurants",
+  IndexName: "Business_ID-index", 
+  KeyConditionExpression: "Business_ID = :v1",
+  ExpressionAttributeValues: {
+    ":v1": id
+  }
+};
+  const command = new QueryCommand(input);
+  const response = await client.send(command);
+  return response.Items[0]
+  //console.log(response);
+}
+
+const put_dynamo = async (email, content, diningDate) => {
+    const client = DynamoDBDocumentClient.from(new DynamoDBClient({'region': "us-east-1"}));
+    const input = {
+      "Item": {
+        "Email": email,
+        "Body": JSON.stringify(content),
+        "DiningDate": diningDate
+      },
+      "ReturnConsumedCapacity": "TOTAL",
+      "TableName": "user-preferences"
+    };
+  const command = new PutCommand(input);
+  const response = await client.send(command);
+  return response;
+}
+
+
+const send_email = async (content) => {
+  const client = new SESClient({'region': 'us-east-1'});
+const input = { // SendEmailRequest
+  Source: "swavida@gmail.com", // required
+  Destination: { // Destination
+    ToAddresses: [ // AddressList
+      content.Email,
+    ],
+  },
+  Message: { // Message
+    Subject: { // Content
+      Data: "Your Handpicked Restaurants are ", // required
+      Charset: "UTF-8",
+    },
+    Body: { // Body
+      Text: {
+        Data: await welcome_formatter(content), // required
+        Charset: "UTF-8",
+      },
+    },
+  },
+};
+const command = new SendEmailCommand(input);
+const response = await client.send(command);
+console.log(response);
+return input;
+}
 
 export const handler = async (event) => {
   
-  if (event.messages) {
-      const input = { // RecognizeTextRequest
-      botId: "C79NLJ913W", // required
-      botAliasId: "TSTALIASID", // required
-      localeId: "en_US", // required
-      sessionId: "temp_session",
-      text: event.messages[0].unstructured.text, // required
-    };
-  const command = new RecognizeTextCommand(input);
-  const botresponse = await client.send(command);
-  console.log(botresponse);
+  const res = await get_messages();
+  const resOpenSearch = await get_openSearch(res.Cuisine);
+  res.restaurants = [];
+  for(const rest of resOpenSearch) {
+    const full_rest = await get_dynamo(rest._id);
+    res.restaurants.push(full_rest)
+  }
+  let content = await send_email(res);
+  await put_dynamo(res['Email'], content, res['DiningDate']);
   
+  // TODO implement
   const response = {
     statusCode: 200,
-    messages: [
-        {
-          type: "unstructured",
-          unstructured: {
-           id: "temp",
-           text: botresponse.messages[0].content,
-           timestamp: Date.now()
-          }
-        }
-      ]
-    ,
+    body: JSON.stringify('Hello from Lambda!'),
   };
   return response;
-  
-    
-  }  
 };
