@@ -14,7 +14,7 @@ from urllib.parse import quote
 from urllib.parse import urlencode
 
 
-API_KEY= '3Ci7a72bPec0X9O6ndPcWE8gOKR1hYxg-N3uEJgRlO7zGCJXIi6BGgvjS5XmdO4A0kDvwZr6IStrNG1_FarhNHi4aPBP9tTzBBkfdPi0-DuGcbHlrPgsiZUl6E3OZXYx'
+API_KEY= 'YOUR_API_KEY'
 
 
 # API constants, you shouldn't have to change these.

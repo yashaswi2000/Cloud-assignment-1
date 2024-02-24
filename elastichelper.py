@@ -3,8 +3,8 @@ import requests
 from requests_aws4auth import AWS4Auth
 from opensearchpy import OpenSearch, RequestsHttpConnection
 
-AWS_ACCESS_KEY = 'AKIAW3MEA63CKPN2MMLB'
-AWS_SECRET_KEY = '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'
+AWS_ACCESS_KEY = 'AWS_ACCESS_KEY_ID'
+AWS_SECRET_KEY = 'AWS_SECRET_ACCESS_KEY'
 region = 'us-east-1'
 service = 'es'
 
